@@ -1,0 +1,8 @@
+
+> rest-express@1.0.0 dev
+> NODE_ENV=development tsx server/index.ts
+
+[1G[0K8:14:55 PM [express] serving on port 5000
+8:15:09 PM [express] GET /api/datasets 200 in 19ms :: []
+8:15:18 PM [express] POST /api/simulate 200 in 1ms :: {"predictedYield":30}
+8:15:21 PM [express] POST /api/simulate 200 in 1ms :: {"predictedYield":26.799999999999997}
