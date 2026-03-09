@@ -1,0 +1,574 @@
+You are a Senior Full-Stack Engineer, Product Architect, AI Systems Engineer, and UI/UX Designer.
+
+Your task is to design and generate a complete production-ready web platform for an AI industrial analytics product called “SmartBatch AI – AI-Driven Manufacturing Optimization for Sustainable Batch Production.”
+
+This platform must function as both:
+
+Marketing Website + Product Presentation
+
+Interactive AI Dashboard SaaS for Manufacturing Optimization
+
+The output must be clean, deployable, scalable production code suitable for real-world deployment.
+
+Use the attached design screenshots as visual inspiration for UI theme, layout hierarchy, typography, colors, and glass-style cards.
+
+The site must follow the same dark industrial AI aesthetic as shown in the screenshots.
+
+ROLE DEFINITION
+
+Act as:
+
+• Lead Product Architect
+• Senior Frontend Engineer
+• Industrial AI Systems Engineer
+• Dashboard Visualization Specialist
+• SaaS Infrastructure Engineer
+• UI/UX Designer
+
+You must generate:
+
+• clean production code
+• modular architecture
+• scalable system design
+• professional UI
+
+No placeholder logic.
+
+SYSTEM OVERVIEW
+
+Build a full AI manufacturing optimization platform that allows factories to:
+
+• Upload batch production data
+• Analyze energy consumption and carbon emissions
+• Detect anomalies in production batches
+• Identify optimal “Golden Batch” profiles
+• Generate AI optimization recommendations
+• Simulate parameter changes with a Digital Twin
+• Forecast future production performance
+• Monitor KPIs through dashboards
+
+This system acts as an AI decision support tool for manufacturing sustainability.
+
+SYSTEM CONSTRAINTS
+
+Frontend
+
+React (Vite)
+TypeScript
+Tailwind CSS
+ShadCN UI
+Recharts or Plotly.js
+TanStack Query
+React Hook Form
+Zod validation
+
+Backend
+
+FastAPI (Python)
+
+Machine Learning
+
+Scikit-learn
+Pandas
+Joblib
+
+Data Processing
+
+Python AI Engine modules:
+
+• batch scoring
+• anomaly detection
+• golden signature detection
+• optimization recommendation
+• yield prediction
+• batch forecasting
+
+Database
+
+PostgreSQL
+
+API
+
+RESTful FastAPI endpoints
+
+Hosting
+
+Frontend: Vercel
+Backend: Railway / Render / AWS
+Database: Supabase Postgres or Neon
+
+Authentication
+
+JWT authentication
+Email/password login
+
+File Upload
+
+CSV batch datasets
+
+Maximum dataset size: 200,000 rows
+
+CORE PRODUCT FEATURES
+
+DATA UPLOAD
+
+User uploads CSV file containing:
+
+• batch_id
+• energy consumption
+• carbon emissions
+• yield rate
+• machine speed
+• temperature
+• timestamp
+
+System validates and stores dataset.
+
+AI ANALYTICS ENGINE
+
+The backend processes the dataset using multiple AI modules:
+
+Batch Scoring
+
+Calculates performance score based on:
+
+energy efficiency
+carbon output
+yield performance
+
+Anomaly Detection
+
+Detect abnormal batches using statistical deviation or isolation forest.
+
+Return:
+
+abnormal batch list
+risk scores
+
+Golden Signature Detection
+
+Identify best performing batch profile.
+
+Return optimal parameters:
+
+temperature
+machine speed
+energy range
+carbon baseline
+yield benchmark
+
+Optimization Engine
+
+Generate AI recommendations including:
+
+recommended temperature
+recommended machine speed
+energy reduction potential
+carbon reduction potential
+yield improvement
+
+Digital Twin Simulation
+
+Interactive simulation allowing user to adjust:
+
+temperature
+machine speed
+energy
+carbon
+
+AI predicts resulting yield using trained ML model.
+
+Forecasting Engine
+
+Predict next 10 batch yields using time-series or regression model.
+
+Display future production trend.
+
+AI Copilot
+
+Natural language assistant capable of answering queries such as:
+
+• best batch
+• optimal temperature
+• reduce carbon
+• average energy
+• total batches processed
+
+Use rule-based logic or lightweight LLM integration.
+
+FUNCTIONAL REQUIREMENTS
+
+USER FLOW
+
+Landing Page → Product Overview
+
+User Login
+
+User uploads dataset
+
+System processes batch analytics
+
+Dashboard displays:
+
+• production metrics
+• charts
+• anomalies
+• recommendations
+
+User can:
+
+simulate production parameters
+forecast future batches
+query AI copilot
+
+NON-FUNCTIONAL REQUIREMENTS
+
+Processing speed:
+
+dataset processing < 5 seconds
+
+Scalability:
+
+handle datasets up to 200k rows
+
+Security:
+
+JWT authentication
+input validation
+file size limits
+SQL injection protection
+
+Reliability:
+
+API error handling
+data validation
+retry logic
+
+Performance:
+
+lazy loading
+efficient chart rendering
+sampling for large datasets
+
+Accessibility:
+
+mobile responsive
+WCAG accessibility compliance
+
+PAGE STRUCTURE
+
+PUBLIC WEBSITE
+
+Landing
+
+Hero section
+product explanation
+industrial AI theme
+
+Problem Statement
+
+Batch variability problem
+energy/carbon inefficiencies
+
+Proposed Solution
+
+Golden signatures
+optimization engine
+real-time monitoring
+
+Technical Approach
+
+six step architecture:
+
+data collection
+preprocessing
+golden signature detection
+real time monitoring
+optimization engine
+human feedback loop
+
+Solution Flowchart
+
+visual pipeline from raw data to recommendations
+
+Features
+
+real time comparison
+adaptive optimization
+human in loop system
+actionable insights
+
+Feasibility
+
+open source stack
+scalable architecture
+
+Business Value
+
+energy reduction
+carbon reduction
+yield improvement
+
+Demo Flow
+
+upload → visualize → recommend → update
+
+Impact
+
+sustainability metrics
+ROI benefits
+
+APP PAGES
+
+Login
+
+User authentication
+
+Dashboard Overview
+
+Total batches
+average energy
+average yield
+anomaly count
+
+Batch Analytics
+
+scatter charts:
+
+temperature vs yield
+machine speed vs yield
+
+AI Analysis
+
+performance score distribution
+anomaly table
+
+AI Recommendations
+
+golden batch profile
+optimization suggestions
+
+Simulation
+
+3D Digital Twin chart
+
+axes:
+
+temperature
+machine speed
+yield
+
+Forecasting
+
+next 10 batch predictions
+
+AI Copilot
+
+chat style interface
+
+Dataset Upload
+
+CSV uploader
+
+UI / UX DESIGN SYSTEM
+
+Use dark industrial AI theme similar to provided images.
+
+Primary Colors
+
+Primary: #22D3EE
+Secondary: #14B8A6
+Accent: #0EA5FF
+
+Background
+
+#020617
+
+Cards
+
+#0F172A
+
+Text
+
+#E5E7EB
+
+Muted
+
+#94A3B8
+
+Error
+
+#F87171
+
+Design Style
+
+Industrial AI dashboard
+Glass-style cards
+Soft neon glow accents
+Rounded corners (14px)
+Gradient borders
+Subtle blur effects
+
+Components
+
+metric cards
+glass panels
+dark dashboards
+3D charts
+interactive sliders
+
+Typography
+
+Inter
+Space Grotesk
+
+DASHBOARD VISUALIZATIONS
+
+Charts required:
+
+Energy Trend (rolling average)
+
+Yield Trend (rolling average)
+
+Temperature vs Yield Scatter
+
+Machine Speed vs Yield Scatter
+
+Performance Score Histogram
+
+3D Digital Twin Scatter
+
+Forecast Line Chart
+
+Charts must handle large datasets using sampling.
+
+BACKEND API DESIGN
+
+Endpoints
+
+POST /upload_dataset
+
+GET /batches
+
+GET /anomalies
+
+GET /golden_batch
+
+GET /recommendations
+
+POST /predict_yield
+
+GET /forecast
+
+POST /copilot_query
+
+DATABASE SCHEMA
+
+users
+
+datasets
+
+batches
+
+recommendations
+
+predictions
+
+logs
+
+INTEGRATION LOGIC
+
+DATA FLOW
+
+CSV Upload
+
+↓
+
+FastAPI dataset processing
+
+↓
+
+AI engine modules
+
+↓
+
+Store processed batch metrics
+
+↓
+
+Return analytics to dashboard
+
+↓
+
+User runs simulations / forecasting
+
+OUTPUT EXPECTATIONS
+
+Generate full production system including:
+
+Frontend
+
+React Vite project
+component architecture
+dashboard pages
+chart components
+authentication pages
+
+Backend
+
+FastAPI service
+AI processing endpoints
+data processing pipeline
+
+Machine Learning
+
+model loading
+prediction functions
+forecasting logic
+
+Database
+
+SQL schema
+
+DevOps
+
+.env template
+Docker support
+deployment guide
+
+Documentation
+
+README
+setup instructions
+API documentation
+
+Code must follow:
+
+SOLID principles
+Type safety
+modular structure
+production quality
+
+RESTRICTIONS
+
+Do NOT
+
+add unrelated AI tools
+build mobile apps
+add social media features
+store large datasets permanently in frontend
+add unnecessary animations
+build heavy enterprise frameworks
+
+Focus only on AI manufacturing optimization platform.
+
+PROJECT GOAL
+
+Deliver a deployable industrial AI platform that demonstrates:
+
+AI-driven manufacturing optimization
+energy and carbon reduction insights
+batch performance analytics
+real-time production decision support
+
+The final output must be fully functional, scalable, and production ready.
