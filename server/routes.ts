@@ -2,21 +2,163 @@ import type { Express } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
-import { z } from "zod";
 import multer from "multer";
-import { openai } from "./replit_integrations/image"; // we will use this for text models too
 import { parse } from "csv-parse/sync";
+import crypto from "crypto";
+import {
+  analyzeBatchesWithAI,
+  forecastWithAI,
+  simulateWithAI,
+  copilotWithAI,
+} from "./ai-client";
 
 // Setup multer for file uploads
 const upload = multer({ storage: multer.memoryStorage() });
+
+function toNumber(value: unknown, fallback = 0): number {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : fallback;
+}
+
+function firstDefined(record: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    if (record[key] !== undefined && record[key] !== null && record[key] !== "") {
+      return record[key];
+    }
+  }
+  return undefined;
+}
+
+function firstString(record: Record<string, unknown>, keys: string[]): string | undefined {
+  const value = firstDefined(record, keys);
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  return String(value);
+}
+
+function hashPassword(password: string): string {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
+  return `${salt}:${hash}`;
+}
+
+function verifyPassword(password: string, storedPassword: string): boolean {
+  const [salt, storedHash] = storedPassword.split(":");
+  if (!salt || !storedHash) {
+    return false;
+  }
+
+  const hashBuffer = crypto.scryptSync(password, salt, 64);
+  const storedBuffer = Buffer.from(storedHash, "hex");
+  if (storedBuffer.length !== hashBuffer.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(storedBuffer, hashBuffer);
+}
+
+function getSessionUserId(req: any): number | null {
+  return typeof req.session?.userId === "number" ? req.session.userId : null;
+}
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
 
+  const requireOwnedDataset = async (req: any, res: any, datasetId: number) => {
+    const userId = getSessionUserId(req);
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return null;
+    }
+
+    const dataset = await storage.getDataset(datasetId);
+    if (!dataset || dataset.userId !== userId) {
+      res.status(404).json({ message: "Dataset not found" });
+      return null;
+    }
+
+    return dataset;
+  };
+
+  app.post(api.auth.register.path, async (req, res) => {
+    try {
+      const input = api.auth.register.input.parse(req.body);
+      const existingUser = await storage.getUserByEmail(input.email.toLowerCase());
+      if (existingUser) {
+        return res.status(409).json({ message: "Email already in use" });
+      }
+
+      const createdUser = await storage.createUser({
+        email: input.email.toLowerCase(),
+        password: hashPassword(input.password),
+      });
+
+      req.session.userId = createdUser.id;
+      return res.status(201).json({ id: createdUser.id, email: createdUser.email });
+    } catch (error) {
+      return res.status(400).json({ message: "Invalid registration input" });
+    }
+  });
+
+  app.post(api.auth.login.path, async (req, res) => {
+    try {
+      const input = api.auth.login.input.parse(req.body);
+      const user = await storage.getUserByEmail(input.email.toLowerCase());
+      if (!user || !verifyPassword(input.password, user.password)) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+
+      req.session.userId = user.id;
+      return res.json({ id: user.id, email: user.email });
+    } catch (error) {
+      return res.status(400).json({ message: "Invalid login input" });
+    }
+  });
+
+  app.post(api.auth.logout.path, (req, res) => {
+    req.session.destroy(() => {
+      res.clearCookie("smartbatch.sid");
+      return res.json({ success: true });
+    });
+  });
+
+  app.get(api.auth.me.path, async (req, res) => {
+    const userId = getSessionUserId(req);
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const user = await storage.getUser(userId);
+    if (!user) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    return res.json({ id: user.id, email: user.email });
+  });
+
+  app.use("/api", (req, res, next) => {
+    if (req.path.startsWith("/auth")) {
+      return next();
+    }
+
+    const userId = getSessionUserId(req);
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    return next();
+  });
+
   app.get(api.datasets.list.path, async (req, res) => {
-    const datasets = await storage.getDatasets();
+    const userId = getSessionUserId(req);
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const allDatasets = await storage.getDatasets();
+    const datasets = allDatasets.filter((dataset) => dataset.userId === userId);
     res.json(datasets);
   });
 
@@ -26,9 +168,13 @@ export async function registerRoutes(
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      // We need a dummy user id since we don't have real auth yet, just to link datasets
+      const userId = getSessionUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
       const dataset = await storage.createDataset({
-        userId: 1, // dummy user
+        userId,
         filename: req.file.originalname,
         status: "processing"
       });
@@ -39,44 +185,69 @@ export async function registerRoutes(
         skip_empty_lines: true
       });
 
-      const batchData = records.map((record: any) => {
-        // Calculate a simple mock score for MVP
-        const energy = parseFloat(record.energy || "0");
-        const carbon = parseFloat(record.carbon || "0");
-        const yieldRate = parseFloat(record['yield rate'] || record.yieldRate || record.yield || "0");
-        const temp = parseFloat(record.temperature || "0");
-        const speed = parseFloat(record['machine speed'] || record.machineSpeed || "0");
-        
-        // Mock scoring: high yield, low energy/carbon is better
-        const score = (yieldRate * 100) / ((energy + carbon + 1));
-        
-        // Mock anomaly detection: just random for MVP
-        const isAnomaly = Math.random() < 0.05;
+      if (!Array.isArray(records) || records.length === 0) {
+        await storage.updateDatasetStatus(dataset.id, "failed");
+        return res.status(400).json({ message: "Uploaded CSV is empty or invalid." });
+      }
+
+      const aiInput = records.map((record: any, index: number) => ({
+        batch_id:
+          firstString(record, ["batch_id", "batchId", "batchid"]) ||
+          `BATCH-${String(index + 1).padStart(4, "0")}`,
+        energy: toNumber(firstDefined(record, ["energy", "Energy"])),
+        carbon: toNumber(firstDefined(record, ["carbon", "Carbon", "co2", "CO2"])),
+        yield_rate: toNumber(
+          firstDefined(record, ["yield_rate", "yield rate", "yieldRate", "yield"])
+        ),
+        temperature: toNumber(firstDefined(record, ["temperature", "temp", "Temperature"])),
+        machine_speed: toNumber(
+          firstDefined(record, ["machine_speed", "machine speed", "machineSpeed", "speed"])
+        ),
+      }));
+
+      const analysis = await analyzeBatchesWithAI(aiInput);
+      const aiByBatchId = new Map(
+        analysis.batches.map((batch) => [batch.batch_id, batch])
+      );
+
+      const batchData = records.map((record: any, index: number) => {
+        const batchIdString =
+          firstString(record, ["batch_id", "batchId", "batchid"]) ||
+          `BATCH-${String(index + 1).padStart(4, "0")}`;
+        const energy = toNumber(firstDefined(record, ["energy", "Energy"]));
+        const carbon = toNumber(firstDefined(record, ["carbon", "Carbon", "co2", "CO2"]));
+        const yieldRate = toNumber(
+          firstDefined(record, ["yield_rate", "yield rate", "yieldRate", "yield"])
+        );
+        const temp = toNumber(firstDefined(record, ["temperature", "temp", "Temperature"]));
+        const speed = toNumber(
+          firstDefined(record, ["machine_speed", "machine speed", "machineSpeed", "speed"])
+        );
+        const aiResult = aiByBatchId.get(batchIdString);
 
         return {
           datasetId: dataset.id,
-          batchIdString: record.batch_id || record.batchId || Math.random().toString(36).substring(7),
+          batchIdString,
           energy,
           carbon,
           yieldRate,
           temperature: temp,
           machineSpeed: speed,
           timestamp: new Date(record.timestamp || Date.now()),
-          score,
-          isAnomaly
+          score: aiResult?.score ?? null,
+          isAnomaly: aiResult?.is_anomaly ?? false,
         };
       });
 
       await storage.insertBatches(batchData);
-      
-      // Calculate a dummy recommendation
+
       await storage.createRecommendation({
         datasetId: dataset.id,
-        recommendedTemp: 75.5,
-        recommendedSpeed: 120.0,
-        energyReduction: 15.2,
-        carbonReduction: 8.5,
-        yieldImprovement: 4.3
+        recommendedTemp: analysis.recommendations.recommended_temperature,
+        recommendedSpeed: analysis.recommendations.recommended_machine_speed,
+        energyReduction: analysis.recommendations.energy_reduction_potential,
+        carbonReduction: analysis.recommendations.carbon_reduction_potential,
+        yieldImprovement: analysis.recommendations.yield_improvement,
       });
 
       await storage.updateDatasetStatus(dataset.id, "completed");
@@ -92,6 +263,8 @@ export async function registerRoutes(
   app.get(api.batches.list.path, async (req, res) => {
     const datasetId = parseInt(req.params.datasetId);
     if (isNaN(datasetId)) return res.status(400).json({ message: "Invalid dataset ID" });
+    const dataset = await requireOwnedDataset(req, res, datasetId);
+    if (!dataset) return;
     const batches = await storage.getBatches(datasetId);
     res.json(batches);
   });
@@ -99,6 +272,8 @@ export async function registerRoutes(
   app.get(api.batches.goldenBatch.path, async (req, res) => {
     const datasetId = parseInt(req.params.datasetId);
     if (isNaN(datasetId)) return res.status(400).json({ message: "Invalid dataset ID" });
+    const dataset = await requireOwnedDataset(req, res, datasetId);
+    if (!dataset) return;
     const golden = await storage.getGoldenBatch(datasetId);
     res.json(golden || null);
   });
@@ -106,6 +281,8 @@ export async function registerRoutes(
   app.get(api.recommendations.get.path, async (req, res) => {
     const datasetId = parseInt(req.params.datasetId);
     if (isNaN(datasetId)) return res.status(400).json({ message: "Invalid dataset ID" });
+    const dataset = await requireOwnedDataset(req, res, datasetId);
+    if (!dataset) return;
     const rec = await storage.getRecommendation(datasetId);
     res.json(rec || null);
   });
@@ -113,22 +290,44 @@ export async function registerRoutes(
   app.get(api.predictions.forecast.path, async (req, res) => {
     const datasetId = parseInt(req.params.datasetId);
     if (isNaN(datasetId)) return res.status(400).json({ message: "Invalid dataset ID" });
-    
-    // Generate dummy forecast
-    const forecast = Array.from({length: 10}).map((_, i) => ({
-      batchIdString: `F-${Math.floor(Math.random()*1000)}`,
-      predictedYield: 90 + Math.random() * 5 - 2.5
+    const dataset = await requireOwnedDataset(req, res, datasetId);
+    if (!dataset) return;
+
+    const batches = await storage.getBatches(datasetId);
+    if (batches.length === 0) {
+      return res.json([]);
+    }
+
+    const aiInput = batches.map((batch) => ({
+      batch_id: batch.batchIdString,
+      energy: batch.energy,
+      carbon: batch.carbon,
+      yield_rate: batch.yieldRate,
+      temperature: batch.temperature,
+      machine_speed: batch.machineSpeed,
     }));
-    
-    res.json(forecast);
+
+    const forecast = await forecastWithAI(aiInput, 10);
+    const response = forecast.map((point) => ({
+      batchIdString: `F-${point.future_batch}`,
+      predictedYield: Number(point.predicted_yield.toFixed(2)),
+    }));
+
+    res.json(response);
   });
 
   app.post(api.predictions.simulate.path, async (req, res) => {
     try {
       const input = api.predictions.simulate.input.parse(req.body);
-      // Simple mock simulation
-      const predictedYield = 85 + (input.temperature * 0.1) - (input.machineSpeed * 0.05);
-      res.json({ predictedYield: Math.min(100, Math.max(0, predictedYield)) });
+
+      const simulation = await simulateWithAI({
+        energy: input.energy,
+        carbon: input.carbon,
+        temperature: input.temperature,
+        machine_speed: input.machineSpeed,
+      });
+
+      res.json({ predictedYield: simulation.predicted_yield });
     } catch (e) {
       res.status(400).json({ message: "Invalid simulation parameters" });
     }
@@ -137,21 +336,39 @@ export async function registerRoutes(
   app.post(api.copilot.query.path, async (req, res) => {
     try {
       const { query, datasetId } = api.copilot.query.input.parse(req.body);
-      
-      let context = "You are SmartBatch AI, an industrial manufacturing assistant.";
-      if (datasetId) {
-         context += " The user is viewing a dataset and asking questions about their manufacturing batches, yields, and energy consumption.";
-      }
-      
-      const response = await openai.chat.completions.create({
-        model: "gpt-5.1",
-        messages: [
-          { role: "system", content: context },
-          { role: "user", content: query }
-        ]
-      });
 
-      res.json({ response: response.choices[0]?.message?.content || "I couldn't process that query." });
+      if (!datasetId) {
+        return res.json({
+          response:
+            "Please select a dataset first so I can answer with production-specific insights.",
+        });
+      }
+
+      const dataset = await requireOwnedDataset(req, res, datasetId);
+      if (!dataset) return;
+
+      const batches = await storage.getBatches(datasetId);
+      if (batches.length === 0) {
+        return res.json({
+          response:
+            "No batches found for this dataset yet. Upload telemetry data to unlock AI insights.",
+        });
+      }
+
+      const aiPayload = {
+        question: query,
+        batches: batches.map((batch) => ({
+          batch_id: batch.batchIdString,
+          energy: batch.energy,
+          carbon: batch.carbon,
+          yield_rate: batch.yieldRate,
+          temperature: batch.temperature,
+          machine_speed: batch.machineSpeed,
+        })),
+      };
+
+      const copilot = await copilotWithAI(aiPayload);
+      res.json({ response: copilot.response });
     } catch (e) {
       console.error(e);
       res.status(500).json({ message: "Error querying copilot" });

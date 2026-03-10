@@ -2,13 +2,22 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import session from "express-session";
+import createMemoryStore from "memorystore";
 
 const app = express();
 const httpServer = createServer(app);
+const MemoryStore = createMemoryStore(session);
 
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
+  }
+}
+
+declare module "express-session" {
+  interface SessionData {
+    userId?: number;
   }
 }
 
@@ -21,6 +30,22 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+app.use(
+  session({
+    name: "smartbatch.sid",
+    secret: process.env.SESSION_SECRET || "smartbatch-dev-session-secret",
+    resave: false,
+    saveUninitialized: false,
+    store: new MemoryStore({ checkPeriod: 24 * 60 * 60 * 1000 }),
+    cookie: {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: false,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    },
+  })
+);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -90,14 +115,7 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
-  httpServer.listen(
-    {
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    },
-    () => {
-      log(`serving on port ${port}`);
-    },
-  );
+  httpServer.listen(port, () => {
+    log(`serving on port ${port}`);
+  });
 })();

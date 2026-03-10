@@ -11,10 +11,11 @@ import {
   Bot,
   Database,
   Menu,
-  X
+  LogOut
 } from 'lucide-react';
 import { useDatasets } from '@/hooks/use-smartbatch';
 import { useActiveDataset } from '@/context/DatasetContext';
+import { useCurrentUser, useLogout } from '@/hooks/use-auth';
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
@@ -28,8 +29,10 @@ const NAV_ITEMS = [
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const { data: datasets = [] } = useDatasets();
+  const { data: currentUser } = useCurrentUser();
+  const logoutMutation = useLogout();
   const { activeDatasetId, setActiveDatasetId } = useActiveDataset();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
 
@@ -39,6 +42,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
       setActiveDatasetId(datasets[0].id);
     }
   }, [datasets, activeDatasetId, setActiveDatasetId]);
+
+  const handleLogout = async () => {
+    await logoutMutation.mutateAsync();
+    setLocation('/auth');
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground flex overflow-hidden">
@@ -88,14 +96,25 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="p-6 border-t border-white/5">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 justify-between">
+            <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-r from-slate-700 to-slate-800 flex items-center justify-center border border-white/10">
-              <span className="font-display font-bold text-sm">OP</span>
+              <span className="font-display font-bold text-sm">
+                {(currentUser?.email || 'OP').slice(0, 2).toUpperCase()}
+              </span>
             </div>
             <div>
-              <p className="text-sm font-medium">Operator 01</p>
-              <p className="text-xs text-muted-foreground">Line Alpha</p>
+              <p className="text-sm font-medium truncate max-w-[120px]">{currentUser?.email || 'Operator'}</p>
+              <p className="text-xs text-muted-foreground">Authenticated</p>
             </div>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="p-2 rounded-lg hover:bg-white/5 text-muted-foreground hover:text-white"
+              title="Logout"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </aside>

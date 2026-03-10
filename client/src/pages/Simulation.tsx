@@ -2,9 +2,26 @@ import React, { useState, useEffect } from 'react';
 import { useSimulate } from '@/hooks/use-smartbatch';
 import { Sliders, Cpu, Activity } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useActiveDataset } from '@/context/DatasetContext';
+import { useBatches } from '@/hooks/use-smartbatch';
+
+function getBounds(values: number[], fallback: [number, number]) {
+  if (!values.length) {
+    return fallback;
+  }
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  if (min === max) {
+    return [min * 0.9, max * 1.1] as [number, number];
+  }
+  const pad = (max - min) * 0.1;
+  return [Math.max(0, min - pad), max + pad] as [number, number];
+}
 
 export default function Simulation() {
   const simulateMutation = useSimulate();
+  const { activeDatasetId } = useActiveDataset();
+  const { data: batches = [] } = useBatches(activeDatasetId);
   
   const [params, setParams] = useState({
     temperature: 200,
@@ -14,14 +31,56 @@ export default function Simulation() {
   });
 
   const [predictedYield, setPredictedYield] = useState<number | null>(null);
+  const [lastSimulatedAt, setLastSimulatedAt] = useState<Date | null>(null);
+
+  const ranges = React.useMemo(() => {
+    const temperature = getBounds(
+      batches.map((b: any) => Number(b.temperature)).filter((v: number) => Number.isFinite(v)),
+      [50, 100]
+    );
+    const machineSpeed = getBounds(
+      batches.map((b: any) => Number(b.machineSpeed)).filter((v: number) => Number.isFinite(v)),
+      [900, 1800]
+    );
+    const energy = getBounds(
+      batches.map((b: any) => Number(b.energy)).filter((v: number) => Number.isFinite(v)),
+      [200, 420]
+    );
+    const carbon = getBounds(
+      batches.map((b: any) => Number(b.carbon)).filter((v: number) => Number.isFinite(v)),
+      [20, 80]
+    );
+    return { temperature, machineSpeed, energy, carbon };
+  }, [batches]);
+
+  // Sync initial knobs to dataset median-ish defaults when data is available.
+  useEffect(() => {
+    if (!batches.length) {
+      return;
+    }
+
+    const sample = batches[Math.floor(batches.length / 2)];
+    if (!sample) return;
+
+    setParams((prev) => ({
+      temperature: Number(sample.temperature) || prev.temperature,
+      machineSpeed: Number(sample.machineSpeed) || prev.machineSpeed,
+      energy: Number(sample.energy) || prev.energy,
+      carbon: Number(sample.carbon) || prev.carbon,
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batches.length]);
 
   // Debounced simulation call
   useEffect(() => {
     const timer = setTimeout(() => {
       simulateMutation.mutate(params, {
-        onSuccess: (data) => setPredictedYield(data.predictedYield)
+        onSuccess: (data) => {
+          setPredictedYield(data.predictedYield);
+          setLastSimulatedAt(new Date());
+        },
       });
-    }, 500);
+    }, 450);
     return () => clearTimeout(timer);
   }, [params]);
 
@@ -34,8 +93,14 @@ export default function Simulation() {
     <div className="space-y-8">
       <div>
         <h2 className="text-3xl font-display font-bold mb-2 text-white">Digital Twin Simulation</h2>
-        <p className="text-muted-foreground">Adjust parameters to predict manufacturing yield in real-time.</p>
+        <p className="text-muted-foreground">Adjust parameters to predict manufacturing yield in real-time. Inputs auto-calibrate from your selected dataset.</p>
       </div>
+
+      {!activeDatasetId && (
+        <div className="glass-card p-4 rounded-xl border border-amber-500/30 text-sm text-amber-300">
+          Select a dataset to calibrate slider ranges and improve simulation relevance.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Controls */}
@@ -52,7 +117,7 @@ export default function Simulation() {
                 <span className="font-mono text-white font-bold">{params.temperature}</span>
               </div>
               <input 
-                type="range" name="temperature" min="100" max="300" step="1" 
+                type="range" name="temperature" min={Math.floor(ranges.temperature[0])} max={Math.ceil(ranges.temperature[1])} step="1" 
                 value={params.temperature} onChange={handleSliderChange} 
               />
             </div>
@@ -63,7 +128,7 @@ export default function Simulation() {
                 <span className="font-mono text-white font-bold">{params.machineSpeed}</span>
               </div>
               <input 
-                type="range" name="machineSpeed" min="500" max="3000" step="10" 
+                type="range" name="machineSpeed" min={Math.floor(ranges.machineSpeed[0])} max={Math.ceil(ranges.machineSpeed[1])} step="5" 
                 value={params.machineSpeed} onChange={handleSliderChange} 
               />
             </div>
@@ -74,7 +139,7 @@ export default function Simulation() {
                 <span className="font-mono text-white font-bold">{params.energy}</span>
               </div>
               <input 
-                type="range" name="energy" min="10" max="200" step="1" 
+                type="range" name="energy" min={Math.floor(ranges.energy[0])} max={Math.ceil(ranges.energy[1])} step="1" 
                 value={params.energy} onChange={handleSliderChange} 
               />
             </div>
@@ -85,7 +150,7 @@ export default function Simulation() {
                 <span className="font-mono text-white font-bold">{params.carbon}</span>
               </div>
               <input 
-                type="range" name="carbon" min="1" max="50" step="0.5" 
+                type="range" name="carbon" min={Math.floor(ranges.carbon[0])} max={Math.ceil(ranges.carbon[1])} step="0.1" 
                 value={params.carbon} onChange={handleSliderChange} 
               />
             </div>
@@ -116,7 +181,9 @@ export default function Simulation() {
             </div>
             
             <p className="text-sm text-muted-foreground mt-6 px-4">
-              AI model is simulating physical dynamics based on historical regression data.
+              {simulateMutation.isError
+                ? 'Simulation request failed. Check backend connection and try adjusting parameters again.'
+                : `AI model is simulating physical dynamics based on historical regression data.${lastSimulatedAt ? ` Last update: ${lastSimulatedAt.toLocaleTimeString()}` : ''}`}
             </p>
           </div>
         </div>

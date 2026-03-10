@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { datasets, batches, recommendations } from "./schema";
 
+const userResponse = z.object({
+  id: z.number(),
+  email: z.string(),
+});
+
 export const errorSchemas = {
   validation: z.object({
     message: z.string(),
@@ -12,6 +17,46 @@ export const errorSchemas = {
 };
 
 export const api = {
+  auth: {
+    me: {
+      method: "GET" as const,
+      path: "/api/auth/me" as const,
+      responses: {
+        200: userResponse,
+      },
+    },
+    register: {
+      method: "POST" as const,
+      path: "/api/auth/register" as const,
+      input: z.object({
+        email: z.string().email(),
+        password: z.string().min(8),
+      }),
+      responses: {
+        201: userResponse,
+        400: errorSchemas.validation,
+      },
+    },
+    login: {
+      method: "POST" as const,
+      path: "/api/auth/login" as const,
+      input: z.object({
+        email: z.string().email(),
+        password: z.string(),
+      }),
+      responses: {
+        200: userResponse,
+        401: errorSchemas.validation,
+      },
+    },
+    logout: {
+      method: "POST" as const,
+      path: "/api/auth/logout" as const,
+      responses: {
+        200: z.object({ success: z.boolean() }),
+      },
+    },
+  },
   datasets: {
     list: {
       method: 'GET' as const,
